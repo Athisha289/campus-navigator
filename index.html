@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Campus Navigator — Hackathon Final</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <!-- Routing Machine CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+  <!-- Control Geocoder CSS (optional) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+
+  <style>
+    :root{
+      --accent: #2563eb;
+      --muted: #6b7280;
+      --card: rgba(255,255,255,0.95);
+    }
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:#f3f6fb}
+    #map{height:100vh;width:100%}
+    /* Sidebar */
+    #sidebar{
+      position:absolute; top:18px; left:18px; z-index:1100;
+      width:320px;
+      background:var(--card);
+      border-radius:12px;
+      box-shadow:0 8px 30px rgba(20,20,40,0.12);
+      padding:14px;
+      overflow:hidden;
+    }
+    #sidebar h1{font-size:18px;margin:0 0 8px 0;color:#0f172a}
+    .controls{display:flex;gap:8px;margin-bottom:10px}
+    .search{
+      flex:1;
+      padding:8px 10px;border-radius:10px;border:1px solid #e6e9ef;font-size:14px;
+    }
+    .btn{
+      background:var(--accent); color:white; border:none; padding:8px 10px; border-radius:10px; cursor:pointer; font-size:14px;
+    }
+    .small-btn{background:white;color:var(--accent);border:1px solid #e6e9ef;padding:7px 8px;border-radius:8px;cursor:pointer}
+    .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+    .chip{padding:6px 8px;border-radius:999px;background:#fff;border:1px solid #eef2ff;color:var(--muted);font-size:13px;cursor:pointer}
+    .chip.active{background:linear-gradient(90deg,#eef2ff,#e6f0ff);color:var(--accent);border-color:rgba(37,99,235,0.15)}
+    .places-list{max-height:52vh;overflow:auto;padding-right:6px}
+    .place-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:linear-gradient(180deg,#ffffff,#fbfdff);margin-bottom:8px;border:1px solid #eef2f7}
+    .place-item img{width:60px;height:44px;object-fit:cover;border-radius:8px}
+    .place-meta{font-size:13px;color:var(--muted)}
+    .place-title{font-weight:600;color:#0f172a}
+    .footer-card{font-size:12px;color:var(--muted);margin-top:8px;text-align:center}
+    /* Mobile responsive */
+    @media (max-width:880px){
+      #sidebar{left:10px;right:10px;width:auto;top:14px;padding:12px}
+      .places-list{max-height:34vh}
+    }
+
+    /* Floating control buttons */
+    .floating-controls{
+      position:absolute;right:18px;top:18px;z-index:1100;display:flex;flex-direction:column;gap:8px
+    }
+    .float-btn{background:white;border-radius:10px;padding:10px 12px;border:1px solid #eef2f7;cursor:pointer;box-shadow:0 6px 18px rgba(12,15,30,0.06)}
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <h1>Campus Navigator — Bishop Heber (Demo)</h1>
+
+    <div class="controls">
+      <input id="searchInput" class="search" placeholder="Search (e.g., Library, GJ Block)" />
+      <button id="centerBtn" class="small-btn" title="Center map">Center</button>
+    </div>
+
+    <div class="filters" id="categoryChips">
+      <!-- chips inserted dynamically -->
+    </div>
+
+    <div class="places-list" id="placesList">
+      <!-- place items inserted dynamically -->
+    </div>
+
+    <div class="footer-card">
+      Tip: Click a place → in popup press <b>Get Directions</b> to route from your current location.
+    </div>
+  </div>
+
+  <div class="floating-controls">
+    <button id="locateBtn" class="float-btn" title="Locate me">📍 Locate Me</button>
+    <button id="clearRouteBtn" class="float-btn" title="Clear route">🧭 Clear Route</button>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Marker Cluster -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <!-- Routing Machine (uses OSRM demo server) -->
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+  <!-- Control Geocoder (optional search) -->
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <script>
+    /**********************
+     *  CONFIG & DATA
+     *  Replace coordinates with verified ones later (these are starter approximations).
+     **********************/
+    const CAMPUS_CENTER = [10.7905, 78.7047]; // Bishop Heber approx center
+    const DEFAULT_ZOOM = 18;
+
+    // sample/ starter BHC places (approximate) - add / edit as needed
+    const PLACES = [
+      { id:1, name:"Admin Block", category:"admin", lat:10.814708, lng:78.673172, img:"", desc:"Administrative offices" },
+      { id:2, name:"GJ Block", category:"department", lat:10.815482, lng:78.674400, img:"", desc:"GJ academic block" },
+      { id:3, name:"Arts & Science Block", category:"department", lat:10.815032, lng:78.672766, img:"", desc:"Arts & Science" },
+      { id:4, name:"Aided Office", category:"office", lat:10.814815, lng:78.672964, img:"", desc:"Aided office" },
+      { id:5, name:"Multipurpose Auditorium", category:"auditorium", lat:10.815179, lng:78.673989, img:"", desc:"Events & functions" },
+      { id:6, name:"Central Library", category:"library", lat:10.814827, lng:78.673892, img:"", desc:"Main library" },
+      { id:7, name:"Canteen", category:"canteen", lat:10.815243, lng:78.672964, img:"", desc:"Student canteen" },
+      { id:8, name:"Hostel", category:"hostel", lat:10.816091, lng:78.676201, img:"", desc:"Boys/Girls hostel" },
+      { id:9, name:"Tennis academy", category:"sports", lat:10.816055, lng:78.675205, img:"", desc:"Tennis academy" },
+      { id:10, name:"Football Ground", category:"sports", lat:10.815711, lng:78.673351, img:"", desc:"Playground" },
+      { id:11, name:"Main Gate / Entrance", category:"entrance", lat:10.814018, lng:78.673290, img:"", desc:"Main entrance" },
+      { id:12, name:"Computer Science Dept.", category:"department", lat:10.815184, lng:78.673198, img:"", desc:"CSE Dept." },
+      { id:13, name:"College parking", category:"transport", lat:10.815421, lng:78.674170, img:"", desc:"Transport" },
+      { id:14, name:"Student parking", category:"transport", lat:10.815115, lng:78.674581, img:"", desc:"Transport" }
+    ];
+
+    // categories and display labels + colors
+    const CATS = {
+      department:{label:"Departments", color:"#0ea5a4"},
+      admin:{label:"Administration", color:"#7c3aed"},
+      library:{label:"Library", color:"#2563eb"},
+      canteen:{label:"Canteen", color:"#f97316"},
+      auditorium:{label:"Auditorium", color:"#ef4444"},
+      hostel:{label:"Hostel", color:"#0ea5a4"},
+      sports:{label:"Sports", color:"#16a34a"},
+      entrance:{label:"Entrance", color:"#8b5cf6"},
+      office:{label:"Office", color:"#6b7280"},
+      transport:{label:"Transport", color:"#0ea5a4"}
+    };
+
+    /**********************
+     *  MAP INIT
+     **********************/
+    const map = L.map('map', { zoomControl:false }).setView(CAMPUS_CENTER, DEFAULT_ZOOM);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:22 }).addTo(map);
+
+    // add zoom control bottom-right
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    /**********************
+     *  MARKERS & CLUSTER
+     **********************/
+    const markerGroup = L.markerClusterGroup({ chunkedLoading: true, showCoverageOnHover:false });
+    const placeIdToMarker = new Map();
+
+    function makeMarker(place){
+      // colored circle marker using DivIcon for nicer look
+      const html = `<div style="
+          width:18px;height:18px;border-radius:50%;
+          background:${CATS[place.category]?.color || '#2563eb'};
+          border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25)"></div>`;
+      const icon = L.divIcon({ html:html, className:'custom-marker', iconSize:[24,24], iconAnchor:[12,12] });
+
+      const m = L.marker([place.lat, place.lng], { icon: icon, title: place.name });
+      const imgHtml = place.img ? `<img src="${place.img}" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : '';
+      const popupHtml = `
+        <div style="min-width:200px">
+          ${imgHtml}
+          <div style="font-weight:700;margin-bottom:6px">${place.name}</div>
+          <div style="font-size:13px;color:#374151;margin-bottom:8px">${place.desc || ''}</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="startRouting(${place.lat}, ${place.lng})" style="flex:1;padding:8px;border-radius:8px;border:none;background:${getColor(place.category)};color:white;cursor:pointer">Get Directions</button>
+            <button onclick="centerTo(${place.lat}, ${place.lng})" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6eefc;background:white;color:${getColor(place.category)};cursor:pointer">Center</button>
+          </div>
+        </div>
+      `;
+      m.bindPopup(popupHtml);
+      return m;
+    }
+
+    function getColor(cat){ return CATS[cat]?.color || '#2563eb' }
+
+    // add all markers
+    PLACES.forEach(p => {
+      const m = makeMarker(p);
+      markerGroup.addLayer(m);
+      placeIdToMarker.set(p.id, m);
+    });
+    map.addLayer(markerGroup);
+
+    /**********************
+     *  SIDEBAR: categories chips & places list
+     **********************/
+    const chipsContainer = document.getElementById('categoryChips');
+    const placesListEl = document.getElementById('placesList');
+
+    // create chips from CATS keys
+    const catKeys = Array.from(new Set(PLACES.map(p => p.category)));
+    const activeCats = new Set(catKeys); // default all selected
+
+    function renderChips(){
+      chipsContainer.innerHTML = '';
+      catKeys.forEach(cat => {
+        const el = document.createElement('div');
+        el.className = 'chip active';
+        el.innerText = CATS[cat]?.label || cat;
+        el.style.borderColor = hexToRgba(getColor(cat),0.12);
+        el.onclick = () => {
+          if(activeCats.has(cat)){ activeCats.delete(cat); el.classList.remove('active'); el.style.opacity=0.7; }
+          else{ activeCats.add(cat); el.classList.add('active'); el.style.opacity=1; }
+          renderPlacesList();
+          updateMarkersVisibility();
+        };
+        chipsContainer.appendChild(el);
+      });
+    }
+
+    function renderPlacesList(){
+      placesListEl.innerHTML = '';
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+
+      // filter places by category and search term
+      const filtered = PLACES.filter(p => activeCats.has(p.category) && (p.name.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)));
+
+      if(filtered.length === 0){
+        placesListEl.innerHTML = '<div style="color:#6b7280;padding:10px">No places found.</div>';
+        return;
+      }
+
+      filtered.forEach(p => {
+        const it = document.createElement('div');
+        it.className = 'place-item';
+        it.innerHTML = `
+          <img src="${p.img || 'https://via.placeholder.com/180x120?text=Place'}" alt="${p.name}" />
+          <div style="flex:1">
+            <div class="place-title">${p.name}</div>
+            <div class="place-meta">${CATS[p.category]?.label || p.category} • ${p.desc || ''}</div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn" style="background:${getColor(p.category)};flex:1" onclick="openPopup(${p.id})">Open</button>
+              <button style="flex:1;border-radius:8px;border:1px solid #e6eefc;background:white;color:${getColor(p.category)}" onclick="startRouting(${p.lat}, ${p.lng})">Route</button>
+            </div>
+          </div>
+        `;
+        placesListEl.appendChild(it);
+      });
+    }
+
+    function updateMarkersVisibility(){
+      // toggle marker visibility by category and search
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      markerGroup.clearLayers();
+      PLACES.forEach(p => {
+        const matches = activeCats.has(p.category) && (p.name.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q));
+        if(matches){
+          markerGroup.addLayer(placeIdToMarker.get(p.id));
+        }
+      });
+    }
+
+    // helper: center to lat/lng
+    function centerTo(lat,lng){
+      map.setView([lat,lng], 20);
+      // open small popup
+      L.popup({offset:[0,-12]}).setLatLng([lat,lng]).setContent('Here:').openOn(map);
+    }
+    window.centerTo = centerTo;
+
+    // helper: open popup of a place by id
+    function openPopup(id){
+      const marker = placeIdToMarker.get(id);
+      if(!marker) return;
+      marker.openPopup();
+      map.setView(marker.getLatLng(), 20);
+    }
+    window.openPopup = openPopup;
+
+    /**********************
+     *  SEARCH & INPUTS
+     **********************/
+    const searchInput = document.getElementById('searchInput');
+    document.getElementById('centerBtn').addEventListener('click', ()=> map.setView(CAMPUS_CENTER, DEFAULT_ZOOM));
+    searchInput.addEventListener('input', () => { renderPlacesList(); updateMarkersVisibility(); });
+
+    // add a geocoder control (optional external search)
+    if (L.Control.Geocoder) {
+      const geocoder = L.Control.geocoder({ position:'topleft', defaultMarkGeocode:false })
+        .on('markgeocode', function(e) {
+          const latlng = e.geocode.center;
+          map.setView(latlng, 19);
+        }).addTo(map);
+    }
+
+    renderChips();
+    renderPlacesList();
+
+    /**********************
+     *  LIVE LOCATION ("You Are Here") + Locate button
+     **********************/
+    let liveMarker = null;
+    function onLocationUpdate(pos){
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      if(!liveMarker){
+        liveMarker = L.circleMarker([lat,lng], { radius:8, color:'#fff', weight:2, fillColor:'#2563eb', fillOpacity:1 }).addTo(map);
+        liveMarker.bindPopup('You are here');
+      } else {
+        liveMarker.setLatLng([lat,lng]);
+      }
+    }
+
+    function onLocationError(err){
+      console.warn('Location error', err);
+    }
+
+    // start watching location (keep updating)
+    if(navigator.geolocation){
+      navigator.geolocation.watchPosition(onLocationUpdate, onLocationError, { enableHighAccuracy:true, maximumAge:2000, timeout:10000 });
+    }
+
+    document.getElementById('locateBtn').addEventListener('click', () => {
+      if(!navigator.geolocation) return alert('Geolocation not supported');
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        map.setView([lat,lng], 19);
+        if(!liveMarker) onLocationUpdate(pos);
+        liveMarker.openPopup();
+      }, err => { alert('Unable to get location: ' + (err.message || err.code)); }, { enableHighAccuracy:true });
+    });
+
+    /**********************
+     *  ROUTING (Get Directions)
+     **********************/
+    let routingControl = null;
+    function startRouting(destLat, destLng){
+      if(!navigator.geolocation){
+        alert('Geolocation needed for routing');
+        return;
+      }
+
+      // remove existing route
+      if(routingControl){
+        map.removeControl(routingControl);
+        routingControl = null;
+      }
+
+      navigator.geolocation.getCurrentPosition(pos => {
+        const from = L.latLng(pos.coords.latitude, pos.coords.longitude);
+        const to = L.latLng(destLat, destLng);
+
+        // add new routing
+        routingControl = L.Routing.control({
+          waypoints: [ from, to ],
+          routeWhileDragging: false,
+          showAlternatives: false,
+          fitSelectedRoute: true,
+          lineOptions: { styles: [{ color: '#2563eb', opacity: 0.9, weight: 6 }] },
+          createMarker: function(i, wp, n){
+            // custom markers for start/end
+            if(i === 0){
+              return L.circleMarker(wp.latLng, { radius:7, fillColor:'#34d399', color:'#fff', weight:2, fillOpacity:1 }).bindPopup('Start: You');
+            } else {
+              return L.marker(wp.latLng, { title:'Destination' });
+            }
+          },
+          router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' })
+        }).addTo(map);
+
+      }, err => {
+        alert('Unable to get your location for routing. Allow location permission and try again.');
+      }, { enableHighAccuracy:true });
+    }
+    window.startRouting = startRouting;
+
+    document.getElementById('clearRouteBtn').addEventListener('click', () => {
+      if(routingControl){ map.removeControl(routingControl); routingControl = null; }
+    });
+
+    /**********************
+     *  UTILS
+     **********************/
+    function hexToRgba(hex, a=1){
+      const h = hex.replace('#','');
+      const bigint = parseInt(h,16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${a})`;
+    }
+  </script>
+
+</body>
+</html>
