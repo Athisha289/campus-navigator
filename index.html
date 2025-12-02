@@ -2,17 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Campus Navigator — Hackathon Final</title>
+  <title>Campus Navigator</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- MarkerCluster CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-  <!-- Routing Machine CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-  <!-- Control Geocoder CSS (optional) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
   <style>
@@ -23,7 +19,7 @@
     }
     html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:#f3f6fb}
     #map{height:100vh;width:100%}
-    /* Sidebar */
+
     #sidebar{
       position:absolute; top:18px; left:18px; z-index:1100;
       width:320px;
@@ -48,40 +44,73 @@
     .chip.active{background:linear-gradient(90deg,#eef2ff,#e6f0ff);color:var(--accent);border-color:rgba(37,99,235,0.15)}
     .places-list{max-height:52vh;overflow:auto;padding-right:6px}
     .place-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:linear-gradient(180deg,#ffffff,#fbfdff);margin-bottom:8px;border:1px solid #eef2f7}
-    .place-item img{width:60px;height:44px;object-fit:cover;border-radius:8px}
     .place-meta{font-size:13px;color:var(--muted)}
     .place-title{font-weight:600;color:#0f172a}
     .footer-card{font-size:12px;color:var(--muted);margin-top:8px;text-align:center}
-    /* Mobile responsive */
-    @media (max-width:880px){
-      #sidebar{left:10px;right:10px;width:auto;top:14px;padding:12px}
-      .places-list{max-height:34vh}
-    }
 
-    /* Floating control buttons */
     .floating-controls{
       position:absolute;right:18px;top:18px;z-index:1100;display:flex;flex-direction:column;gap:8px
     }
     .float-btn{background:white;border-radius:10px;padding:10px 12px;border:1px solid #eef2f7;cursor:pointer;box-shadow:0 6px 18px rgba(12,15,30,0.06)}
-  </style>
+
+    @media (max-width:880px){
+      #sidebar{
+        left:10px;right:10px;width:auto;top:14px;padding:12px;
+      }
+      .places-list{max-height:34vh}
+    }
+
+    @media (max-width:600px){
+      #sidebar{
+        width:100%;
+        left:0; right:0;
+        border-radius:0 0 12px 12px;
+      }
+      #sidebar h1{
+        font-size:16px;
+      }
+      .place-item{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+      .controls{
+        flex-direction:column;
+      }
+      .filters{
+        justify-content:center;
+      }
+      .floating-controls{
+        right:10px; top:auto; bottom:20px;
+      }
+    }
+
+    @media (max-width:420px){
+      #sidebar{
+        padding:10px;
+      }
+      .chip{font-size:12px;padding:5px 6px}
+      .place-title{font-size:14px}
+    }
+    #sidebar {
+  transition: 0.3s ease;
+}
+
+</style>
+
 </head>
 <body>
+  <button id="toggleSidebar" class="small-btn" style="position:absolute;top:10px;left:10px;z-index:1200">☰</button>
+
 
   <div id="sidebar">
-    <h1>Campus Navigator — Bishop Heber (Demo)</h1>
+    <h1>Campus Navigator — Bishop Heber College</h1>
 
     <div class="controls">
       <input id="searchInput" class="search" placeholder="Search (e.g., Library, GJ Block)" />
       <button id="centerBtn" class="small-btn" title="Center map">Center</button>
     </div>
-
-    <div class="filters" id="categoryChips">
-      <!-- chips inserted dynamically -->
-    </div>
-
-    <div class="places-list" id="placesList">
-      <!-- place items inserted dynamically -->
-    </div>
+     <div class="places-list" id="placesList">
+    </div> 
 
     <div class="footer-card">
       Tip: Click a place → in popup press <b>Get Directions</b> to route from your current location.
@@ -95,42 +124,38 @@
 
   <div id="map"></div>
 
-  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Marker Cluster -->
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <!-- Routing Machine (uses OSRM demo server) -->
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-  <!-- Control Geocoder (optional search) -->
   <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
+  
   <script>
-    /**********************
-     *  CONFIG & DATA
-     *  Replace coordinates with verified ones later (these are starter approximations).
-     **********************/
-    const CAMPUS_CENTER = [10.7905, 78.7047]; // Bishop Heber approx center
+    const CAMPUS_CENTER = [10.8148, 78.6740];
     const DEFAULT_ZOOM = 18;
-
-    // sample/ starter BHC places (approximate) - add / edit as needed
     const PLACES = [
-      { id:1, name:"Admin Block", category:"admin", lat:10.814708, lng:78.673172, img:"", desc:"Administrative offices" },
-      { id:2, name:"GJ Block", category:"department", lat:10.815482, lng:78.674400, img:"", desc:"GJ academic block" },
-      { id:3, name:"Arts & Science Block", category:"department", lat:10.815032, lng:78.672766, img:"", desc:"Arts & Science" },
-      { id:4, name:"Aided Office", category:"office", lat:10.814815, lng:78.672964, img:"", desc:"Aided office" },
-      { id:5, name:"Multipurpose Auditorium", category:"auditorium", lat:10.815179, lng:78.673989, img:"", desc:"Events & functions" },
-      { id:6, name:"Central Library", category:"library", lat:10.814827, lng:78.673892, img:"", desc:"Main library" },
-      { id:7, name:"Canteen", category:"canteen", lat:10.815243, lng:78.672964, img:"", desc:"Student canteen" },
-      { id:8, name:"Hostel", category:"hostel", lat:10.816091, lng:78.676201, img:"", desc:"Boys/Girls hostel" },
-      { id:9, name:"Tennis academy", category:"sports", lat:10.816055, lng:78.675205, img:"", desc:"Tennis academy" },
-      { id:10, name:"Football Ground", category:"sports", lat:10.815711, lng:78.673351, img:"", desc:"Playground" },
-      { id:11, name:"Main Gate / Entrance", category:"entrance", lat:10.814018, lng:78.673290, img:"", desc:"Main entrance" },
-      { id:12, name:"Computer Science Dept.", category:"department", lat:10.815184, lng:78.673198, img:"", desc:"CSE Dept." },
-      { id:13, name:"College parking", category:"transport", lat:10.815421, lng:78.674170, img:"", desc:"Transport" },
-      { id:14, name:"Student parking", category:"transport", lat:10.815115, lng:78.674581, img:"", desc:"Transport" }
+      { id:1, name:"Admin Block", category:"admin", lat:10.814708, lng:78.673172},
+      { id:2, name:"GJ Block", category:"department", lat:10.815482, lng:78.674400},
+      { id:3, name:"Arts & Science Block", category:"department", lat:10.815032, lng:78.672766 },
+      { id:4, name:"Aided Office", category:"office", lat:10.814815, lng:78.672964},
+      { id:5, name:"Multipurpose Auditorium", category:"auditorium", lat:10.815179, lng:78.673989},
+      { id:6, name:"Central Library", category:"library", lat:10.814827, lng:78.673892},
+      { id:7, name:"Stone bench Canteen", category:"canteen", lat:10.815237, lng:78.672976},
+      { id:8, name:"Tennis academy", category:"sports", lat:10.816055, lng:78.675205},
+      { id:9, name:"Football Ground", category:"sports", lat:10.815711, lng:78.673351},
+      { id:10, name:"Main Gate / Entrance", category:"entrance", lat:10.814018, lng:78.673290},
+      { id:11, name:"Computer Science Dept.", category:"department", lat:10.815184, lng:78.673198},
+      { id:12, name:"College parking", category:"transport", lat:10.815421, lng:78.674170},
+      { id:13, name:"Student parking", category:"transport", lat:10.815115, lng:78.674581},
+      { id:14, name:"PG Block", category:"department", lat:10.814502, lng:78.672940},
+      { id:15, name:"Church", category:"department", lat:10.816106, lng:78.674041},
+      { id:16, name:"Canteen", category:"canteen", lat:10.815673, lng:78.674091},
+      { id:17, name:"Cafeteria ", category:"canteen", lat:10.814452, lng:78.674006},
+      { id:18, name:"Back gate", category:"entrance", lat:10.815771, lng:78.677368},
+      { id:19, name:"Boys gate", category:"entrance", lat:10.814476, lng:78.674900},
+      { id:20, name:"IT department", category:"department", lat:10.815511, lng:78.677281},
     ];
 
-    // categories and display labels + colors
     const CATS = {
       department:{label:"Departments", color:"#0ea5a4"},
       admin:{label:"Administration", color:"#7c3aed"},
@@ -144,42 +169,39 @@
       transport:{label:"Transport", color:"#0ea5a4"}
     };
 
-    /**********************
-     *  MAP INIT
-     **********************/
     const map = L.map('map', { zoomControl:false }).setView(CAMPUS_CENTER, DEFAULT_ZOOM);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:22 }).addTo(map);
 
-    // add zoom control bottom-right
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    /**********************
-     *  MARKERS & CLUSTER
-     **********************/
-    const markerGroup = L.markerClusterGroup({ chunkedLoading: true, showCoverageOnHover:false });
+    const markerGroup = L.markerClusterGroup({
+  chunkedLoading: true,
+  showCoverageOnHover: false,
+  zoomToBoundsOnClick: false  
+});
+    map.setView(CAMPUS_CENTER, DEFAULT_ZOOM, { animate: false });
+
     const placeIdToMarker = new Map();
 
     function makeMarker(place){
-      // colored circle marker using DivIcon for nicer look
-      const html = `<div style="
-          width:18px;height:18px;border-radius:50%;
+      const html = `<div style=
+          "width:18px;height:18px;border-radius:50%;
           background:${CATS[place.category]?.color || '#2563eb'};
           border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.25)"></div>`;
       const icon = L.divIcon({ html:html, className:'custom-marker', iconSize:[24,24], iconAnchor:[12,12] });
 
       const m = L.marker([place.lat, place.lng], { icon: icon, title: place.name });
-      const imgHtml = place.img ? `<img src="${place.img}" style="width:100%;max-height:120px;object-fit:cover;border-radius:8px;margin-bottom:6px" />` : '';
       const popupHtml = `
-        <div style="min-width:200px">
-          ${imgHtml}
-          <div style="font-weight:700;margin-bottom:6px">${place.name}</div>
-          <div style="font-size:13px;color:#374151;margin-bottom:8px">${place.desc || ''}</div>
-          <div style="display:flex;gap:8px">
-            <button onclick="startRouting(${place.lat}, ${place.lng})" style="flex:1;padding:8px;border-radius:8px;border:none;background:${getColor(place.category)};color:white;cursor:pointer">Get Directions</button>
-            <button onclick="centerTo(${place.lat}, ${place.lng})" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6eefc;background:white;color:${getColor(place.category)};cursor:pointer">Center</button>
-          </div>
-        </div>
-      `;
+  <div style="min-width:200px">
+    <div style="font-weight:700;margin-bottom:6px">${place.name}</div>
+    <div style="font-size:13px;color:#374151;margin-bottom:8px">${place.desc || ''}</div>
+    <div style="display:flex;gap:8px">
+      <button onclick="startRouting(${place.lat}, ${place.lng})" style="flex:1;padding:8px;border-radius:8px;border:none;background:${getColor(place.category)};color:white;cursor:pointer">Get Directions</button>
+      <button onclick="centerTo(${place.lat}, ${place.lng})" style="flex:1;padding:8px;border-radius:8px;border:1px solid #e6eefc;background:white;color:${getColor(place.category)};cursor:pointer">Center</button>
+    </div>
+  </div>
+`;
+
       m.bindPopup(popupHtml);
       return m;
     }
@@ -193,40 +215,15 @@
       placeIdToMarker.set(p.id, m);
     });
     map.addLayer(markerGroup);
+    map.setView(CAMPUS_CENTER, DEFAULT_ZOOM, { animate: false });
 
-    /**********************
-     *  SIDEBAR: categories chips & places list
-     **********************/
-    const chipsContainer = document.getElementById('categoryChips');
     const placesListEl = document.getElementById('placesList');
-
-    // create chips from CATS keys
-    const catKeys = Array.from(new Set(PLACES.map(p => p.category)));
-    const activeCats = new Set(catKeys); // default all selected
-
-    function renderChips(){
-      chipsContainer.innerHTML = '';
-      catKeys.forEach(cat => {
-        const el = document.createElement('div');
-        el.className = 'chip active';
-        el.innerText = CATS[cat]?.label || cat;
-        el.style.borderColor = hexToRgba(getColor(cat),0.12);
-        el.onclick = () => {
-          if(activeCats.has(cat)){ activeCats.delete(cat); el.classList.remove('active'); el.style.opacity=0.7; }
-          else{ activeCats.add(cat); el.classList.add('active'); el.style.opacity=1; }
-          renderPlacesList();
-          updateMarkersVisibility();
-        };
-        chipsContainer.appendChild(el);
-      });
-    }
 
     function renderPlacesList(){
       placesListEl.innerHTML = '';
       const q = document.getElementById('searchInput').value.trim().toLowerCase();
 
-      // filter places by category and search term
-      const filtered = PLACES.filter(p => activeCats.has(p.category) && (p.name.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)));
+      const filtered = PLACES.filter(p => (p.name.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q)));
 
       if(filtered.length === 0){
         placesListEl.innerHTML = '<div style="color:#6b7280;padding:10px">No places found.</div>';
@@ -237,7 +234,6 @@
         const it = document.createElement('div');
         it.className = 'place-item';
         it.innerHTML = `
-          <img src="${p.img || 'https://via.placeholder.com/180x120?text=Place'}" alt="${p.name}" />
           <div style="flex:1">
             <div class="place-title">${p.name}</div>
             <div class="place-meta">${CATS[p.category]?.label || p.category} • ${p.desc || ''}</div>
@@ -251,27 +247,12 @@
       });
     }
 
-    function updateMarkersVisibility(){
-      // toggle marker visibility by category and search
-      const q = document.getElementById('searchInput').value.trim().toLowerCase();
-      markerGroup.clearLayers();
-      PLACES.forEach(p => {
-        const matches = activeCats.has(p.category) && (p.name.toLowerCase().includes(q) || (p.desc||'').toLowerCase().includes(q));
-        if(matches){
-          markerGroup.addLayer(placeIdToMarker.get(p.id));
-        }
-      });
-    }
-
-    // helper: center to lat/lng
     function centerTo(lat,lng){
       map.setView([lat,lng], 20);
-      // open small popup
       L.popup({offset:[0,-12]}).setLatLng([lat,lng]).setContent('Here:').openOn(map);
     }
     window.centerTo = centerTo;
 
-    // helper: open popup of a place by id
     function openPopup(id){
       const marker = placeIdToMarker.get(id);
       if(!marker) return;
@@ -280,14 +261,10 @@
     }
     window.openPopup = openPopup;
 
-    /**********************
-     *  SEARCH & INPUTS
-     **********************/
     const searchInput = document.getElementById('searchInput');
     document.getElementById('centerBtn').addEventListener('click', ()=> map.setView(CAMPUS_CENTER, DEFAULT_ZOOM));
-    searchInput.addEventListener('input', () => { renderPlacesList(); updateMarkersVisibility(); });
+    searchInput.addEventListener('input', () => { renderPlacesList(); });
 
-    // add a geocoder control (optional external search)
     if (L.Control.Geocoder) {
       const geocoder = L.Control.geocoder({ position:'topleft', defaultMarkGeocode:false })
         .on('markgeocode', function(e) {
@@ -296,12 +273,8 @@
         }).addTo(map);
     }
 
-    renderChips();
     renderPlacesList();
 
-    /**********************
-     *  LIVE LOCATION ("You Are Here") + Locate button
-     **********************/
     let liveMarker = null;
     function onLocationUpdate(pos){
       const lat = pos.coords.latitude, lng = pos.coords.longitude;
@@ -317,7 +290,6 @@
       console.warn('Location error', err);
     }
 
-    // start watching location (keep updating)
     if(navigator.geolocation){
       navigator.geolocation.watchPosition(onLocationUpdate, onLocationError, { enableHighAccuracy:true, maximumAge:2000, timeout:10000 });
     }
@@ -332,9 +304,6 @@
       }, err => { alert('Unable to get location: ' + (err.message || err.code)); }, { enableHighAccuracy:true });
     });
 
-    /**********************
-     *  ROUTING (Get Directions)
-     **********************/
     let routingControl = null;
     function startRouting(destLat, destLng){
       if(!navigator.geolocation){
@@ -342,7 +311,6 @@
         return;
       }
 
-      // remove existing route
       if(routingControl){
         map.removeControl(routingControl);
         routingControl = null;
@@ -352,7 +320,6 @@
         const from = L.latLng(pos.coords.latitude, pos.coords.longitude);
         const to = L.latLng(destLat, destLng);
 
-        // add new routing
         routingControl = L.Routing.control({
           waypoints: [ from, to ],
           routeWhileDragging: false,
@@ -360,7 +327,6 @@
           fitSelectedRoute: true,
           lineOptions: { styles: [{ color: '#2563eb', opacity: 0.9, weight: 6 }] },
           createMarker: function(i, wp, n){
-            // custom markers for start/end
             if(i === 0){
               return L.circleMarker(wp.latLng, { radius:7, fillColor:'#34d399', color:'#fff', weight:2, fillOpacity:1 }).bindPopup('Start: You');
             } else {
@@ -377,12 +343,21 @@
     window.startRouting = startRouting;
 
     document.getElementById('clearRouteBtn').addEventListener('click', () => {
-      if(routingControl){ map.removeControl(routingControl); routingControl = null; }
-    });
+  if (routingControl) {
+    routingControl.getPlan().setWaypoints([]); 
+    map.removeControl(routingControl);
 
-    /**********************
-     *  UTILS
-     **********************/
+    if (routingControl._line) {
+      map.removeLayer(routingControl._line);
+    }
+    if (routingControl._alternatives) {
+      routingControl._alternatives.forEach(alt => map.removeLayer(alt));
+    }
+
+    routingControl = null;
+  }
+});
+
     function hexToRgba(hex, a=1){
       const h = hex.replace('#','');
       const bigint = parseInt(h,16);
@@ -391,7 +366,24 @@
       const b = bigint & 255;
       return `rgba(${r}, ${g}, ${b}, ${a})`;
     }
-  </script>
+const sidebar = document.getElementById("sidebar");
+const toggleBtn = document.getElementById("toggleSidebar");
 
+let isCollapsed = false;
+
+toggleBtn.addEventListener("click", () => {
+  if (!isCollapsed) {
+    sidebar.style.transform = "translateX(-110%)";
+    sidebar.style.transition = "0.3s ease";
+    toggleBtn.textContent = "☰";
+  } else {
+    sidebar.style.transform = "translateX(0)";
+    toggleBtn.textContent = "×";
+  }
+  isCollapsed = !isCollapsed;
+});
+
+
+  </script>
 </body>
 </html>
